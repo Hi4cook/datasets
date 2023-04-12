@@ -41,28 +41,26 @@ class CsvDatasetReader(AbstractDatasetReader):
         )
 
     def read(self):
-        # Build iterable dataset
         if self.streaming:
-            dataset = self.builder.as_streaming_dataset(split=self.split)
-        # Build regular (map-style) dataset
-        else:
-            download_config = None
-            download_mode = None
-            verification_mode = None
-            base_path = None
+            return self.builder.as_streaming_dataset(split=self.split)
+        download_config = None
+        download_mode = None
+        verification_mode = None
+        base_path = None
 
-            self.builder.download_and_prepare(
-                download_config=download_config,
-                download_mode=download_mode,
-                verification_mode=verification_mode,
-                # try_from_hf_gcs=try_from_hf_gcs,
-                base_path=base_path,
-                num_proc=self.num_proc,
-            )
-            dataset = self.builder.as_dataset(
-                split=self.split, verification_mode=verification_mode, in_memory=self.keep_in_memory
-            )
-        return dataset
+        self.builder.download_and_prepare(
+            download_config=download_config,
+            download_mode=download_mode,
+            verification_mode=verification_mode,
+            # try_from_hf_gcs=try_from_hf_gcs,
+            base_path=base_path,
+            num_proc=self.num_proc,
+        )
+        return self.builder.as_dataset(
+            split=self.split,
+            verification_mode=verification_mode,
+            in_memory=self.keep_in_memory,
+        )
 
 
 class CsvDatasetWriter:
@@ -79,7 +77,7 @@ class CsvDatasetWriter:
 
         self.dataset = dataset
         self.path_or_buf = path_or_buf
-        self.batch_size = batch_size if batch_size else config.DEFAULT_MAX_BATCH_SIZE
+        self.batch_size = batch_size or config.DEFAULT_MAX_BATCH_SIZE
         self.num_proc = num_proc
         self.encoding = "utf-8"
         self.to_csv_kwargs = to_csv_kwargs

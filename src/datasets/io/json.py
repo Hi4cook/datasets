@@ -46,28 +46,26 @@ class JsonDatasetReader(AbstractDatasetReader):
         )
 
     def read(self):
-        # Build iterable dataset
         if self.streaming:
-            dataset = self.builder.as_streaming_dataset(split=self.split)
-        # Build regular (map-style) dataset
-        else:
-            download_config = None
-            download_mode = None
-            verification_mode = None
-            base_path = None
+            return self.builder.as_streaming_dataset(split=self.split)
+        download_config = None
+        download_mode = None
+        verification_mode = None
+        base_path = None
 
-            self.builder.download_and_prepare(
-                download_config=download_config,
-                download_mode=download_mode,
-                verification_mode=verification_mode,
-                # try_from_hf_gcs=try_from_hf_gcs,
-                base_path=base_path,
-                num_proc=self.num_proc,
-            )
-            dataset = self.builder.as_dataset(
-                split=self.split, verification_mode=verification_mode, in_memory=self.keep_in_memory
-            )
-        return dataset
+        self.builder.download_and_prepare(
+            download_config=download_config,
+            download_mode=download_mode,
+            verification_mode=verification_mode,
+            # try_from_hf_gcs=try_from_hf_gcs,
+            base_path=base_path,
+            num_proc=self.num_proc,
+        )
+        return self.builder.as_dataset(
+            split=self.split,
+            verification_mode=verification_mode,
+            in_memory=self.keep_in_memory,
+        )
 
 
 class JsonDatasetWriter:
@@ -84,7 +82,7 @@ class JsonDatasetWriter:
 
         self.dataset = dataset
         self.path_or_buf = path_or_buf
-        self.batch_size = batch_size if batch_size else config.DEFAULT_MAX_BATCH_SIZE
+        self.batch_size = batch_size or config.DEFAULT_MAX_BATCH_SIZE
         self.num_proc = num_proc
         self.encoding = "utf-8"
         self.to_json_kwargs = to_json_kwargs
@@ -92,8 +90,8 @@ class JsonDatasetWriter:
     def write(self) -> int:
         _ = self.to_json_kwargs.pop("path_or_buf", None)
         orient = self.to_json_kwargs.pop("orient", "records")
-        lines = self.to_json_kwargs.pop("lines", True if orient == "records" else False)
-        index = self.to_json_kwargs.pop("index", False if orient in ["split", "table"] else True)
+        lines = self.to_json_kwargs.pop("lines", orient == "records")
+        index = self.to_json_kwargs.pop("index", orient not in ["split", "table"])
         compression = self.to_json_kwargs.pop("compression", None)
 
         if compression not in [None, "infer", "gzip", "bz2", "xz"]:
@@ -102,12 +100,12 @@ class JsonDatasetWriter:
         if isinstance(self.path_or_buf, (str, bytes, os.PathLike)):
             with fsspec.open(self.path_or_buf, "wb", compression=compression) as buffer:
                 written = self._write(file_obj=buffer, orient=orient, lines=lines, index=index, **self.to_json_kwargs)
+        elif compression:
+            raise NotImplementedError(
+                f"The compression parameter is not supported when writing to a buffer, but compression={compression}"
+                " was passed. Please provide a local path instead."
+            )
         else:
-            if compression:
-                raise NotImplementedError(
-                    f"The compression parameter is not supported when writing to a buffer, but compression={compression}"
-                    " was passed. Please provide a local path instead."
-                )
             written = self._write(
                 file_obj=self.path_or_buf, orient=orient, lines=lines, index=index, **self.to_json_kwargs
             )
